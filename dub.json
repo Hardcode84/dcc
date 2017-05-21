@@ -36,6 +36,15 @@
             }
         },
         {
+            "name": "worker",
+            "targetType": "executable",
+            "sourcePaths": ["source/worker"],
+            "importPaths": ["source/worker"],
+            "dependencies": {
+                "dcc:common": "*"
+            }
+        },
+        {
             "name": "dcl",
             "targetType": "executable",
             "sourcePaths": ["source/dcl"],

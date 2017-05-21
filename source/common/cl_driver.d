@@ -80,6 +80,11 @@ public:
         }
         return ret.data;
     }
+
+    void executeTask(in Task task)
+    {
+
+    }
 }
 
 static this()

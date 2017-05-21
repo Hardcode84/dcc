@@ -11,10 +11,23 @@ struct Task
     alias IdType = ushort;
     IdType id = 0;
     bool local = true;
-    IdType[] dependsOn;
-    const(string)[] options;
+    immutable(IdType)[] dependsOn;
+    immutable(string)[] options;
     string inFile;
     string outFile;
+}
+
+enum TaskResult
+{
+    Success,
+    Failure
+}
+
+struct TaskResultInfo
+{
+    TaskResult result;
+    string stdout;
+    string stderr;
 }
 
 enum TaskState

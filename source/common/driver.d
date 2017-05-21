@@ -8,8 +8,8 @@ import serialization;
 
 struct Command
 {
-    const(string)[] options;
-    const(string)[] files;
+    immutable(string)[] options;
+    immutable(string)[] files;
     string outFile;
 
     @property bool empty() const pure nothrow @nogc 
@@ -37,6 +37,7 @@ interface DriverBase
 {
     Command parseCommandLine(in string[] opts);
     Task[] processCommand(in Command command);
+    void executeTask(in Task task);
 }
 
 void registerDriver(in string name, DriverBase driver)

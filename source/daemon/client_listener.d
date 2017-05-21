@@ -6,7 +6,7 @@ import vibe.d;
 
 import client_comm;
 
-final class ClientListener
+struct ClientListener
 {
 public:
     this(in Settings settings)

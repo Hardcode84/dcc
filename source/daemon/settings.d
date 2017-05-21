@@ -8,4 +8,7 @@ struct Settings
     PeerDesc[] peers;
 
     ushort driverListenPort = 55555;
+
+    int maxInternalWorkers = 4;
+    int maxExternalWorkers = 4;
 }
