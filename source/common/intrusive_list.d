@@ -20,13 +20,14 @@ public:
     void unlink()
     {
         assert(!!mPrev == !!mNext);
-        if(mPrev !is null)
+        if(isLinked())
         {
             mPrev.mNext = mNext;
             mNext.mPrev = mPrev;
             mNext = null;
             mPrev = null;
         }
+        assert(!isLinked());
     }
 
     @property isLinked() const

@@ -11,7 +11,7 @@ import driver;
 final class ClDriver : DriverBase
 {
 public:
-    Command parseCommandLine(in string[] opts)
+    override Command parseCommandLine(in string[] opts) const
     {
         bool link = false;
         Command ret;
@@ -52,7 +52,7 @@ public:
         return ret;
     }
 
-    Task[] processCommand(in Command command)
+    override Task[] processCommand(in Command command) const
     {
         assert(!command.files.empty);
         assert(!command.outFile.empty);
@@ -81,13 +81,15 @@ public:
         return ret.data;
     }
 
-    void executeTask(in Task task)
+    override TaskResultInfo executeTask(in Task task) const
     {
-
+        import std.stdio;
+        stderr.write(task);
+        return TaskResultInfo.init;
     }
 }
 
 static this()
 {
-    registerDriver("cl", new ClDriver);
+    registerDriver!ClDriver("cl");
 }

@@ -3,8 +3,10 @@ module worker_comm;
 import std.stdio;
 import std.exception;
 import std.string;
+import std.format;
 
 import serialization;
+import task;
 
 void writeReady(File stream)
 {
@@ -14,7 +16,8 @@ void writeReady(File stream)
 
 void waitForReady(File stream, scope void delegate(in string) flushSink)
 {
-    char[] buf;
+    char[256] temp;
+    char[] buf = temp[];
     size_t charsRead = 0;
     while (stream.readln(buf))
     {
@@ -29,14 +32,17 @@ void waitForReady(File stream, scope void delegate(in string) flushSink)
     }
 }
 
-void sendMessage(T)(File stream, const ref T msg)
+void sendMessage(T)(File stream, in T msg)
 {
-    auto writer = TextStream((a) =>
-        {
-            assert(a.length > 0);
-            stream.write(a);
-        });
-    serialize(stream, msg);
+    File* f = &stream; // Workaround for closure scoped desctruction protection
+    void sink(const(char)[] t) scope
+    {
+        assert(t.length > 0);
+        f.write(t);
+    }
+    auto writer = TextStream(&sink, null);
+    serialize(writer, msg);
+    stream.writeln();
     stream.flush();
 }
 
@@ -45,14 +51,26 @@ T receiveMessage(T)(File stream)
     char[256] temp;
     char[] buff = temp[];
     enforce(stream.readln(buff) > 0, "Stream was closed");
-    auto reader = TextStream(null, (a) =>
-        {
-            const len = a.length;
-            enforce(len >= buff.length, "Unexpected end of stream");
-            assert(len > 0);
-            a = buff[0..len];
-            buff = buff[len..$];
-        });
+    void sink(ref char[] t) scope
+    {
+        const len = t.length;
+        assert(len > 0);
+        enforce(len <= buff.length, format("Unexpected end of stream (expected %s got %s)", buff.length, len));
+        t = buff[0..len];
+        buff = buff[len..$];
+    }
+    auto reader = TextStream(null, &sink);
+    return deserialize!T(reader);
+}
+
+struct WorkerTask
+{
+    Task task;
+}
+
+struct WorkerTaskResult
+{
+    TaskResultInfo result;
 }
 
 private:

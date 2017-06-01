@@ -5,19 +5,33 @@ import settings;
 import vibe.d;
 
 import client_comm;
+import drivers;
+
+alias TaskProcessor = TaskResultInfo delegate(ref TaskGroup tasks);
+
+struct ClientListenerSettings
+{
+    ushort listenPort;
+    TaskProcessor processor;
+}
 
 struct ClientListener
 {
 public:
-    this(in Settings settings)
+    this(in ClientListenerSettings settings)
     {
-        scope(success) logInfo("Clent listener created");
-        scope(failure) logInfo("Clent listener creation failed");
-        m_listeners = listenTCP(settings.driverListenPort, &listen);
+        scope(success) logInfo("Client listener created (%s listeners)", m_listeners.length);
+        scope(failure) logInfo("Client listener creation failed");
+        assert(settings.processor !is null);
+        m_listeners = listenTCP(settings.listenPort, &listen);
+        m_processor = settings.processor;
     }
+
+    this(this) @disable;
 
 private:
     TCPListener[] m_listeners;
+    const TaskProcessor m_processor;
 
     void listen(TCPConnection connection)
     {
@@ -31,9 +45,12 @@ private:
             {
                 connection.write(cast(const(ubyte[]))buff);
             },
-            (driver, command)
+            (driverName, command)
             {
-                logInfo("Process %s %s", driver, command);
+                assert(m_processor !is null);
+                auto driver = getDriver(driverName);
+                auto tasks = TaskGroup(driver.processCommand(command));
+                m_processor(tasks);
             });
     }
 }

@@ -8,17 +8,21 @@ import peer;
 import settings;
 import client_listener;
 import workers_pool;
+import scheduler;
+import drivers;
 
 import vibe.d;
 
 int run()
 {
-    //auto context = new Context;
     logInfo("Running");
     scope(exit) logInfo("Exiting");
+
     Settings settings;
     auto workersPool = WorkersPool(WorkersPoolSettings(max(settings.maxInternalWorkers, settings.maxExternalWorkers), "cl"));
-    auto clientListener = ClientListener(settings);
+    auto localWorkerSink = workersPool.taskSink(settings.maxInternalWorkers);
+    auto scheduler = scheduler.Scheduler(SchedulerSettings(&localWorkerSink.tryPut, &localWorkerSink.tryPut));
+    auto clientListener = ClientListener(ClientListenerSettings(settings.driverListenPort, &scheduler.processTaskGroup));
 
     /*auto listener = listenTCP(port1, (connection)
     {

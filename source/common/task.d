@@ -17,6 +17,14 @@ struct Task
     string outFile;
 }
 
+alias TaskCompletionCallback = void delegate(immutable(Task)* task, in TaskResultInfo result) immutable;
+
+struct TaskDesc
+{
+    immutable(Task)* task;
+    TaskCompletionCallback completion_callback;
+}
+
 enum TaskResult
 {
     Success,
@@ -40,7 +48,7 @@ enum TaskState
 
 struct TaskWrapper
 {
-    const Task task;
+    immutable Task task;
     TaskState state = TaskState.Ready;
     ushort unresolvedDeps = 0;
     Task.IdType[] nextTasks;
@@ -48,7 +56,7 @@ struct TaskWrapper
 
     IntrusiveListLink link;
 
-    alias task this;
+    //alias task this;
 
     void depReady()
     {
@@ -68,6 +76,7 @@ struct TaskWrapper
     {
         assert(TaskState.Ready == state);
         assert(group !is null);
+        assert(link.isLinked());
         link.unlink();
         group.inProgressTasks.insertBack(&this);
         state = TaskState.InProgress;
@@ -77,6 +86,7 @@ struct TaskWrapper
     {
         assert(TaskState.InProgress == state);
         assert(group !is null);
+        assert(link.isLinked());
         link.unlink();
         group.completedTasks.insertBack(&this);
         foreach(id; nextTasks)
@@ -99,13 +109,14 @@ struct TaskGroup
     NodeList inProgressTasks;
     NodeList completedTasks;
 
-    this(in Task[] src)
+    this(in Task[] src) pure nothrow
     {
         tasks.length = src.length;
         foreach(i, const ref task; src)
         {
             auto newTask = &tasks[i];
             *newTask = TaskWrapper(task);
+            newTask.group = &this;
             const hasDeps = !task.dependsOn.empty;
             newTask.state = (hasDeps ? TaskState.HasDeps : TaskState.Ready);
             if(hasDeps)
@@ -126,7 +137,7 @@ struct TaskGroup
         }
         foreach(i, ref task; tasks)
         {
-            foreach(id; task.dependsOn)
+            foreach(id; task.task.dependsOn)
             {
                 assert(id < tasks.length);
                 ++tasks[id].unresolvedDeps;
@@ -134,7 +145,7 @@ struct TaskGroup
         }
         foreach(i, ref task; tasks)
         {
-            foreach(id; task.dependsOn)
+            foreach(id; task.task.dependsOn)
             {
                 assert(id < tasks.length);
                 assert(tasks[id].unresolvedDeps > 0);
@@ -147,13 +158,15 @@ struct TaskGroup
         }
     }
 
-    bool completed() const
+    this(this) @disable;
+
+    bool completed() const pure nothrow @nogc
     {
         assert(!tasks.empty);
         return tasksWithDeps.empty() && availableTasks.empty() && availableLocalTasks.empty() && inProgressTasks.empty();
     }
 
-    TaskWrapper* getNextTask(bool local)
+    TaskWrapper* getNextTask(bool local) pure nothrow @nogc
     {
         auto list = (local ? &availableLocalTasks : &availableTasks);
         if (list.empty)

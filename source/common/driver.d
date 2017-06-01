@@ -35,17 +35,18 @@ struct Command
 
 interface DriverBase
 {
-    Command parseCommandLine(in string[] opts);
-    Task[] processCommand(in Command command);
-    void executeTask(in Task task);
+    Command parseCommandLine(in string[] opts) const;
+    Task[] processCommand(in Command command) const;
+    TaskResultInfo executeTask(in Task task) const;
 }
 
-void registerDriver(in string name, DriverBase driver)
+void registerDriver(T)(in string name)
 {
     assert(!name.empty);
-    assert(driver !is null);
-    assert(name !in drivers);
-    drivers[name] = driver;
+    if(name !in drivers)
+    {
+        drivers[name] = new T;
+    }
 }
 
 DriverBase getDriver(in string name)

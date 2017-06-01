@@ -1,8 +1,12 @@
 module serialization;
 
+import std.exception;
+import std.traits;
+import std.conv: to;
+import std.format;
+
 void serialize(ObjT, StreamT)(ref StreamT stream, const ref ObjT obj)
 {
-    import std.traits: isArray, isAssociativeArray, isBasicType, Unqual;
     alias T = Unqual!ObjT;
     static if(is(T == struct) ||
               is(T == class))
@@ -38,54 +42,58 @@ void serialize(ObjT, StreamT)(ref StreamT stream, const ref ObjT obj)
 
 ObjT deserialize(ObjT, StreamT)(ref StreamT stream)
 {
-    import std.container.util : make;
-    import std.traits: isArray, isAssociativeArray, isBasicType, Unqual;
     alias T = Unqual!ObjT;
-    ObjT obj;
     static if(is(T == struct) ||
               is(T == class))
     {
-        obj = make!T;
+        T obj = make!T;
         foreach(ref field; obj.tupleof)
         {
             field = deserialize!(typeof(field))(stream);
         }
+        return obj;
     }
     else static if(isArray!ObjT)
     {
-        alias ElemT = typeof(obj[0]);
+        T dummy = void;
+        alias ElemT = Unqual!(typeof(dummy[0]));
         static if(isBasicType!ElemT)
         {
-            obj = stream.read!ObjT;
+            return stream.read!ObjT;
         }
         else
         {
-            import std.traits: isMutable;
-            import std.exception: assumeUnique;
-            const len = deserialize!(typeof(T.length))(stream);
-            T temp;
-            temp.length = len;
+            const len = deserialize!(typeof(dummy.length))(stream);
+            static if(isDynamicArray!T)
+            {
+                ElemT[] temp;
+                temp.length = len;
+            }
+            else
+            {
+                ElemT[T.sizeof / ElemT.sizeof] temp;
+            }
+
             foreach(i; 0..len)
             {
                 temp[i] = deserialize!(Unqual!(ElemT))(stream);
             }
 
-            static if(isMutable!ElemT)
+            static if(isMutable!(typeof(dummy[0])))
             {
-                obj = temp;
+                return temp;
             }
             else
             {
-                obj = assumeUnique(temp);
+                return temp.assumeUnique;
             }
         }
     }
     //else static if(isAssociativeArray!T) {}
     else
     {
-        obj = stream.read!T;
+        return stream.read!T;
     }
-    return obj;
 }
 
 struct TextStream
@@ -100,60 +108,107 @@ struct TextStream
 
     void write(T)(in T val) const
     {
-        import std.traits: isSomeString, isIntegral, Unqual;
-        import std.conv: to;
-        import std.format: format, sformat;
         assert(out_sink !is null);
         static if(isSomeString!T)
         {
             write(val.length.to!SizeT);
-            out_sink(val);
+            if(val.length > 0)
+            {
+                out_sink(val);
+            }
         }
-        else
+        else static if(isArray!T)
         {
-            static assert(isIntegral!T);
-            char[64] buff = void;
-            enum formatStr = format("%%0%sx", T.sizeof * 2);
+            if(isDynamicArray!T)
+            {
+                write(val.length.to!SizeT);
+            }
+
+            foreach(elem; val[])
+            {
+                write(elem);
+            }
+        }
+        else static if(isIntegral!T || isBoolean!T)
+        {
+            enum BuffSize = (isBoolean!T ? 1 : T.sizeof * 2);
+            char[BuffSize] buff = void;
+            enum formatStr = format("%%0%sx", BuffSize);
             const str = sformat(buff, formatStr, val);
-            assert(str.length == (T.sizeof * 2));
+            assert(str.length == BuffSize);
             out_sink(str);
         }
+        else static assert(false, format("Unhandled type %s", T.stringof));
     }
 
     T read(T)() const
     {
-        import std.traits: isSomeString, Unqual;
-        import std.conv: to;
-        import std.format: formattedRead, format;
         assert(in_sink !is null);
         static if(isSomeString!T)
         {
-            const len = read!(typeof(ret.length));
-            char[] temp;
-            temp.length = len;
-            char[] buff = temp[];
-            in_sink(buff);
-            assert(ret.length == len);
-            if (buff.ptr is temp.ptr)
+            const len = read!SizeT();
+            if(len > 0)
             {
-                return buff;
+                char[] temp;
+                temp.length = len;
+                char[] buff = temp[];
+                in_sink(buff);
+                assert(buff.length == len);
+                if (buff.ptr is temp.ptr)
+                {
+                    return buff.assumeUnique;
+                }
+                else
+                {
+                    return buff.idup;
+                }
             }
             else
             {
-                return buff.idup;
+                return (char[]).init;
             }
         }
-        else
+        else static if(isArray!T)
         {
-            static assert(isIntegral!T);
-            char[T.sizeof * 2] temp = void;
+            T dummy = void;
+            alias ElemT = Unqual!(typeof(dummy[0]));
+            static if(isDynamicArray!T)
+            {
+                const len = read!SizeT();
+                ElemT[] ret;
+                ret.length = len;
+            }
+            else
+            {
+                ElemT[T.sizeof / ElemT.sizeof] ret = void;
+            }
+
+            foreach(ref elem; ret[])
+            {
+                elem = read!ElemT();
+            }
+
+            static if(isMutable!(typeof(dummy[0])))
+            {
+                return ret;
+            }
+            else
+            {
+                return ret.assumeUnique;
+            }
+        }
+        else static if(isIntegral!T || isBoolean!T)
+        {
+            enum BuffSize = (isBoolean!T ? 1 : T.sizeof * 2);
+            char[BuffSize] temp = void;
             char[] buff = temp[];
             in_sink(buff);
             assert(buff.length == temp.length);
-            Unqual!T ret;
-            enforce(1 == formattedRead!"%x"(buff, ret), format("Unable to parse \"%s\" as %s", buff, (Unqual!T).stringof));
-            return ret;
+            Unqual!(OriginalType!T) ret;
+            enforce(1 == buff.formattedRead("%x",&ret), format("Unable to parse \"%s\" as %s", buff, (Unqual!T).stringof));
+            return cast(T)ret;
         }
+        else static assert(false, format("Unhandled type %s", T.stringof));
     }
 }
 
@@ -234,4 +289,21 @@ immutable(string)[] read_string_list(scope InSink sink)
         ret[i] = read_string(sink);
     }
     return assumeUnique(ret);
+}
+
+private:
+template make(T)
+if (is(T == struct) || is(T == class))
+{
+    T make(Args...)(Args arguments)
+    if (is(T == struct) && __traits(compiles, T(arguments)))
+    {
+        return T(arguments);
+    }
+
+    T make(Args...)(Args arguments)
+    if (is(T == class) && __traits(compiles, new T(arguments)))
+    {
+        return new T(arguments);
+    }
 }

@@ -15,7 +15,8 @@ void main(string[] args)
     writeReady(stdout);
     while(true)
     {
-        string str = stdin.readln();
-        stderr.write(str);
+        const task = receiveMessage!WorkerTask(stdin);
+        const result = driver.executeTask(task.task);
+        sendMessage(stdout, WorkerTaskResult(result));
     }
 }
