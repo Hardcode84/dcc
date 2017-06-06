@@ -16,7 +16,7 @@ void process(in string driver, in Command command)
     socket.connect(new InternetAddress(0x7F000001/*127.0.0.1*/, 55555));
     scope(exit) socket.shutdown(SocketShutdown.BOTH);
     client_process(driver, command,
-        (buff)
+        (ref buff)
         {
             while(!buff.empty)
             {

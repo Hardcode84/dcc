@@ -6,8 +6,7 @@
     "sourcePaths": ["source/dcc"],
     "importPaths": ["source/dcc"],
     "dependencies": {
-        "dcc:daemon": "*",
-        "dcc:driver": "*"
+        "dcc:daemon": "*"
     },
     "subPackages": [
         {

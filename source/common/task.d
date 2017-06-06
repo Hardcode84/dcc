@@ -6,6 +6,18 @@ import std.array;
 import intrusive_list;
 import serialization;
 
+struct Command
+{
+    immutable(string)[] options;
+    immutable(string)[] files;
+    string outFile;
+
+    @property bool empty() const pure nothrow @nogc
+    {
+        return options.empty && files.empty && outFile.empty;
+    }
+}
+
 struct Task
 {
     alias IdType = ushort;

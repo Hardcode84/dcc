@@ -6,49 +6,66 @@ import std.algorithm;
 
 import serialization;
 import driver;
+import task;
 
-void client_process(in string driver, in Command command, scope InSink readSink, scope OutSink writeSink)
+alias OutSink = void delegate(const(void)[]);
+alias InSink = void delegate(ref void[]);
+
+TaskResultInfo client_process(in string driver, in Command command, scope InSink readSink, scope OutSink writeSink)
 {
-    ClientHello.write_string(writeSink);
-    checkString!ClientHelloResp(readSink);
-    driver.write_string(writeSink);
-    command.serialize(writeSink);
-    checkString!ClientCommReady(readSink);
+    auto stream = BinaryStream(writeSink, readSink);
+    serialize(stream, ClientHello.init);
+    const serverHello = deserialize!ServerHello(stream);
+    enforce(serverHello.header == ServerHelloStr, "Invalid server responce");
+    serialize(stream, ClientCommand(driver, command));
+    const response = deserialize!ServerResult(stream);
+    return response.result;
 }
 
-alias ProcessSink = void delegate(in string, in Command);
+alias ProcessSink = TaskResultInfo delegate(in string, in Command);
 void server_process(scope InSink readSink, scope OutSink writeSink, scope ProcessSink processSink)
 {
-    checkString!ClientHello(readSink);
-    ClientHelloResp.write_string(writeSink);
-    const driver = read_string(readSink);
-    const command = Command.deserialize(readSink);
-    processSink(driver, command);
-    ClientCommReady.write_string(writeSink);
+    auto stream = BinaryStream(writeSink, readSink);
+    const clientHello = deserialize!ClientHello(stream);
+    enforce(clientHello.header == ClientHelloStr, "Invalid client response");
+    enforce(clientHello.protocolVersion == ProtocolVersion, format("Invalid protocol version (expected %s got %s)",ProtocolVersion,clientHello.protocolVersion));
+    serialize(stream, ServerHello.init);
+    const command = deserialize!ClientCommand(stream);
+    const result = processSink(command.driver, command.command);
+    serialize(stream, ServerResult(result));
 }
 
 private:
 // 
 // SERVER<-ClientHello<-CLIENT
-// SERVER->ClientHelloResp->CLIENT
-// SERVER<-driver_string<-CLIENT
-// SERVER<-command<-CLIENT
-// SERVER->ClientCommReady->CLIENT
+// SERVER->ServerHello->CLIENT
+// SERVER<-ClientCommand<-CLIENT
+// SERVER->ServerResult->CLIENT
 //
 // END
 
-enum ClientHello = "dcc-cl-hel";
-enum ClientHelloResp = "dcc-cl-ack";
-enum ClientCommReady = "dcc-cl-rdy";
+enum ProtocolVersion = 1;
+enum ClientHelloStr = "dcc-cl-hel";
+enum ServerHelloStr = "dcc-cl-ack";
 
-void checkString(alias S)(scope InSink sink)
+struct ClientHello
 {
-    const str = read_string(sink);
-    enforce(equal(str[], S[]), format("Unexpected responce %s (expected %s)", str, S));
+    char[ClientHelloStr.length] header = ClientHelloStr;
+    byte protocolVersion = ProtocolVersion;
 }
 
-void checkVal(string Desc, T)(scope InSink sink, in T expected)
+struct ServerHello
 {
-    const val = read_val!T(sink);
-    enforce(val == expected, format("%s (expected %s, got %s)", Desc, expected, val));
+    char[ServerHelloStr.length] header = ServerHelloStr;
+}
+
+struct ClientCommand
+{
+    string driver;
+    Command command;
+}
+
+struct ServerResult
+{
+    TaskResultInfo result;
 }

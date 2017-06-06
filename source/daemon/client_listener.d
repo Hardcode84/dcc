@@ -35,9 +35,10 @@ private:
 
     void listen(TCPConnection connection)
     {
+        scope(exit) connection.close();
         logInfo("Connected");
         server_process(
-            (buff)
+            (ref buff)
             {
                 connection.read(cast(ubyte[])buff);
             },
@@ -50,7 +51,7 @@ private:
                 assert(m_processor !is null);
                 auto driver = getDriver(driverName);
                 auto tasks = TaskGroup(driver.processCommand(command));
-                m_processor(tasks);
+                return m_processor(tasks);
             });
     }
 }

@@ -5,6 +5,11 @@ import std.traits;
 import std.conv: to;
 import std.format;
 
+void serialize(ObjT, StreamT)(ref StreamT stream, in ObjT obj)
+{
+    serialize(stream, obj);
+}
+
 void serialize(ObjT, StreamT)(ref StreamT stream, const ref ObjT obj)
 {
     alias T = Unqual!ObjT;
@@ -212,83 +217,114 @@ struct TextStream
     }
 }
 
-
-alias OutSink = void delegate(const(void)[]);
-alias InSink = void delegate(void[]);
-
-void write_val(T)(in T val, scope OutSink sink)
+struct BinaryStream
 {
-    union U
-    {
-        ubyte[T.sizeof] buff;
-        T val;
-    }
-    U u;
-    u.val = val;
-    sink(cast(void[])u.buff);
-}
+    alias OutSink = void delegate(const(void)[]);
+    alias InSink = void delegate(ref void[]);
 
-alias SizeType = ushort;
+    OutSink out_sink = null;
+    InSink in_sink = null;
 
-void write_string(in string str, scope OutSink sink)
-{
-    enum MaxLen = SizeType.max;
-    assert(str.length <= MaxLen);
-    const len = cast(SizeType)str.length;
-    len.write_val(sink);
-    if(len > 0)
-    {
-        sink(cast(void[])str);
-    }
-}
+    alias SizeT = ushort;
 
-void write_string_list(in string[] str, scope OutSink sink)
-{
-    enum MaxLen = SizeType.max;
-    assert(str.length <= MaxLen);
-    const len = cast(SizeType)str.length;
-    len.write_val(sink);
-    foreach(s; str[])
+    void write(T)(in T val) const
     {
-        write_string(s, sink);
-    }
-}
+        assert(out_sink !is null);
+        static if(isSomeString!T)
+        {
+            write(val.length.to!SizeT);
+            if(val.length > 0)
+            {
+                out_sink(val);
+            }
+        }
+        else static if(isArray!T)
+        {
+            if(isDynamicArray!T)
+            {
+                write(val.length.to!SizeT);
+            }
 
-T read_val(T)(scope InSink sink)
-{
-    union U
-    {
-        ubyte[T.sizeof] buff;
-        T val;
+            foreach(elem; val[])
+            {
+                write(elem);
+            }
+        }
+        else static if(isIntegral!T || isBoolean!T || isSomeChar!T)
+        {
+            const void* ptr = &val;
+            out_sink(ptr[0..1]);
+        }
+        else static assert(false, format("Unhandled type %s", T.stringof));
     }
-    U u;
-    sink(cast(void[])u.buff);
-    return u.val;
-}
 
-string read_string(scope InSink sink)
-{
-    const size = read_val!SizeType(sink);
-    string ret;
-    if(size > 0)
+    T read(T)() const
     {
-        ret.length = size;
-        sink(cast(void[])(ret[]));
-    }
-    return ret;
-}
+        assert(in_sink !is null);
+        static if(isSomeString!T)
+        {
+            const len = read!SizeT();
+            if(len > 0)
+            {
+                void[] temp;
+                temp.length = len;
+                void[] buff = temp[];
+                in_sink(buff);
+                assert(buff.length == len);
+                if (buff.ptr is temp.ptr)
+                {
+                    return (cast(string)buff).assumeUnique;
+                }
+                else
+                {
+                    return (cast(string)buff).idup;
+                }
+            }
+            else
+            {
+                return (char[]).init;
+            }
+        }
+        else static if(isArray!T)
+        {
+            T dummy = void;
+            alias ElemT = Unqual!(typeof(dummy[0]));
+            static if(isDynamicArray!T)
+            {
+                const len = read!SizeT();
+                ElemT[] ret;
+                ret.length = len;
+            }
+            else
+            {
+                ElemT[T.sizeof / ElemT.sizeof] ret = void;
+            }
 
-immutable(string)[] read_string_list(scope InSink sink)
-{
-    import std.exception: assumeUnique;
-    const size = read_val!SizeType(sink);
-    string[] ret;
-    ret.length = size;
-    foreach(i; 0..size)
-    {
-        ret[i] = read_string(sink);
+            foreach(ref elem; ret[])
+            {
+                elem = read!ElemT();
+            }
+
+            static if(isMutable!(typeof(dummy[0])))
+            {
+                return ret;
+            }
+            else
+            {
+                return ret.assumeUnique;
+            }
+        }
+        else static if(isIntegral!T || isBoolean!T || isSomeChar!T)
+        {
+            enum BuffSize = T.sizeof;
+            void[BuffSize] temp = void;
+            void[] buff = temp[];
+            in_sink(buff);
+            assert(buff.length == BuffSize);
+            return *(cast(T*)buff.ptr);
+        }
+        else static assert(false, format("Unhandled type %s", T.stringof));
     }
-    return assumeUnique(ret);
 }
 
 private:
