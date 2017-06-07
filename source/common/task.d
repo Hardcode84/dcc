@@ -45,7 +45,7 @@ enum TaskResult
 
 struct TaskResultInfo
 {
-    TaskResult result;
+    TaskResult result = TaskResult.Failure;
     string stdout;
     string stderr;
 }

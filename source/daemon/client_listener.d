@@ -35,7 +35,6 @@ private:
 
     void listen(TCPConnection connection)
     {
-        scope(exit) connection.close();
         logInfo("Connected");
         server_process(
             (ref buff)

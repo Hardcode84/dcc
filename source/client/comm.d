@@ -15,14 +15,15 @@ void process(in string driver, in Command command)
     socket.blocking = true;
     socket.connect(new InternetAddress(0x7F000001/*127.0.0.1*/, 55555));
     scope(exit) socket.shutdown(SocketShutdown.BOTH);
-    client_process(driver, command,
+    const result = client_process(driver, command,
         (ref buff)
         {
-            while(!buff.empty)
+            void[] temBuff = buff;
+            while(!temBuff.empty)
             {
                 const received = socket.receive(buff);
                 enforce(Socket.ERROR != received, "Socket receive error");
-                buff = buff[received..$];
+                temBuff = temBuff[received..$];
             }
         },
         (buff)

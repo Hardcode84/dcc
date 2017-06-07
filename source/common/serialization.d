@@ -12,6 +12,7 @@ void serialize(ObjT, StreamT)(ref StreamT stream, in ObjT obj)
 
 void serialize(ObjT, StreamT)(ref StreamT stream, const ref ObjT obj)
 {
+    alias SizeT = ushort;
     alias T = Unqual!ObjT;
     static if(is(T == struct) ||
               is(T == class))
@@ -31,7 +32,7 @@ void serialize(ObjT, StreamT)(ref StreamT stream, const ref ObjT obj)
         else
         {
             const len = obj.length;
-            serialize(stream, len);
+            serialize(stream, len.to!SizeT);
             foreach(const ref elem; obj[])
             {
                 serialize(stream, elem);
@@ -47,6 +48,7 @@ void serialize(ObjT, StreamT)(ref StreamT stream, const ref ObjT obj)
 
 ObjT deserialize(ObjT, StreamT)(ref StreamT stream)
 {
+    alias SizeT = ushort;
     alias T = Unqual!ObjT;
     static if(is(T == struct) ||
               is(T == class))
@@ -68,9 +70,9 @@ ObjT deserialize(ObjT, StreamT)(ref StreamT stream)
         }
         else
         {
-            const len = deserialize!(typeof(dummy.length))(stream);
             static if(isDynamicArray!T)
             {
+                const len = deserialize!SizeT(stream);
                 ElemT[] temp;
                 temp.length = len;
             }
@@ -253,7 +255,7 @@ struct BinaryStream
         else static if(isIntegral!T || isBoolean!T || isSomeChar!T)
         {
             const void* ptr = &val;
-            out_sink(ptr[0..1]);
+            out_sink(ptr[0..T.sizeof]);
         }
         else static assert(false, format("Unhandled type %s", T.stringof));
     }

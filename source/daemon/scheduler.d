@@ -115,7 +115,7 @@ public:
         while(true)
         {
             scheduleTasks(tasks);
-            //waitTasks(tasks, m_settings.task_wait_timeout);
+            waitTasks(tasks, m_settings.task_wait_timeout);
 
             if(TaskResult.Success != task_result || tasks.completed)
             {
