@@ -103,6 +103,7 @@ struct TaskWrapper
         group.completedTasks.insertBack(&this);
         foreach(id; nextTasks)
         {
+            assert(id != task.id);
             assert(id < group.tasks.length);
             group.tasks[id].depReady();
         }
@@ -147,30 +148,27 @@ struct TaskGroup
                 }
             }
         }
-        foreach(i, ref task; tasks)
+
+        foreach(ref task; tasks)
         {
+            task.unresolvedDeps = cast(ushort)task.task.dependsOn.length;
             foreach(id; task.task.dependsOn)
             {
                 assert(id < tasks.length);
-                ++tasks[id].unresolvedDeps;
-            }
-        }
-        foreach(i, ref task; tasks)
-        {
-            foreach(id; task.task.dependsOn)
-            {
-                assert(id < tasks.length);
-                assert(tasks[id].unresolvedDeps > 0);
-                if(tasks[id].nextTasks.empty)
-                {
-                    tasks[id].nextTasks.reserve(tasks[id].unresolvedDeps);
-                }
-                tasks[id].nextTasks ~= id;
+                tasks[id].nextTasks ~= task.task.id;
             }
         }
     }
 
     this(this) @disable;
+
+    ~this()
+    {
+        foreach(ref task; tasks)
+        {
+            task.link.unlink();
+        }
+    }
 
     bool completed() const pure nothrow @nogc
     {
