@@ -2,12 +2,7 @@
     "name": "dcc",
     "description": "A minimal D application.",
     "authors": ["Vano"],
-    "targetType": "executable",
-    "sourcePaths": ["source/dcc"],
-    "importPaths": ["source/dcc"],
-    "dependencies": {
-        "dcc:daemon": "*"
-    },
+    "targetType": "none",
     "subPackages": [
         {
             "name": "common",
