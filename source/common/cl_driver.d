@@ -11,6 +11,11 @@ import driver;
 final class ClDriver : DriverBase
 {
 public:
+    override string getInfoString() const
+    {
+        return "msvc cl driver";
+    }
+
     override Command parseCommandLine(in string[] opts) const
     {
         bool link = false;

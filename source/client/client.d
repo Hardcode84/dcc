@@ -1,6 +1,7 @@
 module client;
 
 import std.exception;
+import std.stdio;
 
 import log;
 import drivers;
@@ -13,6 +14,14 @@ int main(string[] args)
     auto driver = getDriver(driverStr);
     assert(driver !is null);
     auto cmd = driver.parseCommandLine(args[2..$]);
-    process(driverStr, cmd);
+    if(cmd.empty)
+    {
+        writefln("dcc client");
+        writefln("driver: %s", driver.getInfoString());
+    }
+    else
+    {
+        process(driverStr, cmd);
+    }
     return 0;
 }

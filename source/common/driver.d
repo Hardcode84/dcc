@@ -8,6 +8,7 @@ import serialization;
 
 interface DriverBase
 {
+    string getInfoString() const;
     Command parseCommandLine(in string[] opts) const;
     Task[] processCommand(in Command command) const;
     TaskResultInfo executeTask(in Task task) const;
