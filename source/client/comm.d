@@ -8,14 +8,14 @@ import client_comm;
 
 import driver;
 
-void process(in string driver, in Command command)
+auto process(in string driver, in Command command)
 {
     auto socket = new TcpSocket(AddressFamily.INET);
     scope(exit) socket.close();
     socket.blocking = true;
     socket.connect(new InternetAddress(0x7F000001/*127.0.0.1*/, 55555));
     scope(exit) socket.shutdown(SocketShutdown.BOTH);
-    const result = client_process(driver, command,
+    return client_process(driver, command,
         (ref buff)
         {
             void[] temBuff = buff;

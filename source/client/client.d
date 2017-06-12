@@ -18,10 +18,13 @@ int main(string[] args)
     {
         writefln("dcc client");
         writefln("driver: %s", driver.getInfoString());
+        return 0;
     }
     else
     {
-        process(driverStr, cmd);
+        auto res = process(driverStr, cmd);
+        stdout.write(res.stdout);
+        stderr.write(res.stderr);
+        return (res.result == TaskResult.Success ? 0 : 1);
     }
-    return 0;
 }

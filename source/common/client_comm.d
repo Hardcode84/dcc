@@ -16,7 +16,7 @@ TaskResultInfo client_process(in string driver, in Command command, scope InSink
     auto stream = BinaryStream(writeSink, readSink);
     serialize(stream, ClientHello.init);
     const serverHello = deserialize!ServerHello(stream);
-    enforce(serverHello.header == ServerHelloStr, "Invalid server responce");
+    enforce(serverHello.header == ServerHelloStr, "Invalid server response");
     serialize(stream, ClientCommand(driver, command));
     const response = deserialize!ServerResult(stream);
     return response.result;
