@@ -39,7 +39,7 @@ public:
         m_workers.length = maxWorkers;
         foreach(i; 0..maxWorkers)
         {
-            m_workers[i] = createWorker(WorkerSettings(settings.driver));
+            m_workers[i] = createWorker(WorkerSettings(settings.driver, "\"D:\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat\" amd64"));
         }
     }
 
@@ -109,6 +109,7 @@ private:
 struct WorkerSettings
 {
     string driver;
+    string shellCommand;
 }
 
 alias WorkerPtr = Unique!Worker;
@@ -180,11 +181,24 @@ private:
         TaskCompletionCallback completion_callback;
     }
 
+    static auto executeWorker(in WorkerSettings settings)
+    {
+        enum WorkerExec = "dcc_worker";
+        if(settings.shellCommand.empty)
+        {
+            return pipeProcess([WorkerExec, settings.driver], Redirect.stdin | Redirect.stdout);
+        }
+        else
+        {
+            return pipeShell(format("%s && %s %s", settings.shellCommand, WorkerExec, settings.driver), Redirect.stdin | Redirect.stdout);
+        }
+    }
+
     static void threadFunc(shared Worker* worker, in WorkerSettings settings)
     {
         // Not the most efficient implementation, but ok for now
-        logInfo("Creating worker");
-        auto pipes = pipeProcess(["dcc_worker", settings.driver], Redirect.stdin | Redirect.stdout);
+        logInfo("Creating worker(driver=%s shellCommand=%s)", settings.driver, settings.shellCommand);
+        auto pipes = executeWorker(settings);
         auto pid = pipes.pid;
         scope(exit)
         {
