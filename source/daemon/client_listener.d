@@ -35,7 +35,6 @@ private:
 
     void listen(TCPConnection connection)
     {
-        logInfo("Connected");
         server_process(
             (ref buff)
             {

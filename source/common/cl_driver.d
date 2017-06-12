@@ -7,6 +7,7 @@ import std.array;
 import std.algorithm;
 
 import driver;
+import process;
 
 final class ClDriver : DriverBase
 {
@@ -18,70 +19,105 @@ public:
 
     override Command parseCommandLine(in string[] opts) const
     {
-        bool link = false;
-        Command ret;
-        foreach(ref opt; opts)
+        return Command(opts.idup);
+    }
+
+    override Task[] processCommand(in Command command) const
+    {
+        bool link = true;
+        bool dll = false;
+        bool preprocessOnly = false;
+
+        auto options = appender!(string[]);
+        auto inFiles = appender!(string[]);
+        auto inObjFiles = appender!(string[]);
+        string outFile;
+        foreach(ref opt; command.options)
         {
             assert(!opt.empty);
             if('/' == opt[0] || '-' == opt[0])
             {
                 enum outStr = " out:";
-                enum linkStr = "link";
-                if(opt.length >= outStr.length && outStr[1..$] == opt[1..outStr.length])
+                if(auto outName = checkOpt!"out:"(opt))
                 {
-                    ret.outFile = opt[outStr.length..$];
+                    outFile = opt[outStr.length..$];
                 }
-                else if (opt.length >= linkStr.length && linkStr == opt[1..$])
+                else if(auto outName = checkOpt!"OUT:"(opt))
                 {
-                    link = true;
+                    outFile = opt[outStr.length..$];
+                }
+                else if (checkOpt!"P"(opt))
+                {
+                    preprocessOnly = true;
+                }
+                else if (checkOpt!"c"(opt))
+                {
+                    link = false;
+                    options ~= opt;
+                }
+                else if (checkOpt!"LD"(opt) || checkOpt!"DLL"(opt)  || checkOpt!"dll"(opt))
+                {
+                    dll = true;
                 }
                 else
                 {
-                    ret.options ~= opt;
+                    options ~= opt;
                 }
             }
             else
             {
-                ret.files ~= opt;
-                if (ret.outFile.empty)
+                const ext = opt.extension;
+                if(ext == "lib" || ext == "obj")
                 {
-                    ret.outFile = opt.stripExtension;
+                    inObjFiles ~= opt;
+                }
+                else
+                {
+                    inFiles ~= opt;
+                }
+
+                if (outFile.empty)
+                {
+                    outFile = opt.stripExtension;
                 }
             }
         }
 
-        if (!ret.outFile.empty && !link)
-        {
-            ret.outFile ~= ".o";
-        }
-        return ret;
-    }
-
-    override Task[] processCommand(in Command command) const
-    {
-        assert(!command.files.empty);
-        assert(!command.outFile.empty);
-        enforce(1 == command.files.length, "Only single-file commands supported now");
+        auto objFiles = appender!(string[]);
+        auto objFilesTaks = appender!(Task.IdType[]);
         auto ret = appender!(Task[]);
         Task.IdType currId = 0;
-        const preprocess_only = command.options.any!(a => "/P" == a || "-P" == a);
-        foreach(file; command.files)
+        foreach(file; inFiles.data[])
         {
-            if(preprocess_only)
+            if(preprocessOnly)
             {
-                auto ppId = currId++;
-                ret ~= Task(ppId, true, [], command.options, file, command.outFile);
+                const ppId = currId++;
+                ret ~= Task(ppId, true, [], CompileCommand, options.data[].assumeUnique, [file], [outFile]);
             }
             else
             {
                 // Preprocess
                 auto tempFile = file ~ ".pp";
-                auto ppId = currId++;
-                ret ~= Task(ppId, true, [], command.options ~ "/P", file, tempFile);
-                // Compie
-                auto clId = currId++;
-                ret ~= Task(clId, false, [ppId], command.options, tempFile, command.outFile);
+                const ppId = currId++;
+                ret ~= Task(ppId, true, [], CompileCommand, (["/P"] ~ options.data[]).assumeUnique, [file], [tempFile]);
+                // Compile
+                auto tempObjFile = file ~ ".obj";
+                const clId = currId++;
+                ret ~= Task(clId, false, [ppId], CompileCommand, options.data[].assumeUnique, [tempFile], [tempObjFile]);
+                if(link)
+                {
+                    objFiles ~= tempObjFile;
+                    objFilesTaks ~= clId;
+                }
             }
+        }
+
+        if(link)
+        {
+            const linkId = currId++;
+            const inLinkFiles = (objFiles.data[] ~ inObjFiles.data[]).assumeUnique;
+            const outLinkFiles = (dll ? [outFile ~ ".dll", outFile ~ ".lib"] : [outFile ~ ".exe"]).assumeUnique;
+            ret ~= Task(linkId, true, objFilesTaks.data[].assumeUnique, CompileCommand, options.data[].assumeUnique, inLinkFiles, outLinkFiles);
         }
         return ret.data;
     }
@@ -89,12 +125,34 @@ public:
     override TaskResultInfo executeTask(in Task task) const
     {
         import std.stdio;
-        stderr.write(task);
-        return TaskResultInfo.init;
+        stderr.writeln(task);
+        assert(!task.inFiles.empty);
+        assert(!task.outFiles.empty);
+        string[] cmd = [CompileCommand] ~ task.inFiles ~ task.options;
+        if(task.options.find!(a => ("-link" == a || "/link" == a)).empty)
+        {
+            cmd ~= "/link";
+        }
+        cmd ~= "/out:"~task.outFiles[0];
+        const res = execute(cmd);
+        stderr.writeln(res);
+        return TaskResultInfo((0 == res.status ? TaskResult.Success : TaskResult.Failure), res.stdout, res.stderr);
     }
 }
 
 static this()
 {
     registerDriver!ClDriver("cl");
+}
+
+private:
+enum CompileCommand = "cl.exe";
+
+string checkOpt(string opt)(string val)
+{
+    if(val.length >= (opt.length + 1) && opt[] == val[1..opt.length])
+    {
+        return val[(opt.length + 1)..$];
+    }
+    return string.init;
 }

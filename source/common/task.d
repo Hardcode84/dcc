@@ -9,12 +9,10 @@ import serialization;
 struct Command
 {
     immutable(string)[] options;
-    immutable(string)[] files;
-    string outFile;
 
     @property bool empty() const pure nothrow @nogc
     {
-        return options.empty && files.empty && outFile.empty;
+        return options.empty;
     }
 }
 
@@ -24,9 +22,10 @@ struct Task
     IdType id = 0;
     bool local = true;
     immutable(IdType)[] dependsOn;
+    string command;
     immutable(string)[] options;
-    string inFile;
-    string outFile;
+    immutable(string)[] inFiles;
+    immutable(string)[] outFiles;
 }
 
 alias TaskCompletionCallback = void delegate(immutable(Task)* task, in TaskResultInfo result) immutable;
